@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>課程節奏設計器</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        :root {
+            --primary-bg: #f4f7f6;
+            --accent-color: #4f46e5;
+            --danger-color: #ff4d4d;
+            --safe-color: #4caf50;
+            --block-talk: #3498db;
+            --block-discuss: #2ecc71;
+            --block-activity: #f1c40f;
+            --block-quiz: #9b59b6;
+            --block-other: #95a5a6;
+        }
+
+        body {
+            font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            background-color: var(--primary-bg);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        #app {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            #app { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        h2 { margin-top: 0; color: var(--accent-color); display: flex; align-items: center; gap: 10px; }
+
+        .settings-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f9f9f9;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 8px;
+        }
+
+        .total-time-display { font-size: 1.8rem; font-weight: bold; }
+        .target-input { width: 60px; font-size: 1.2rem; border: 1px solid #ddd; text-align: center; border-radius: 4px; }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 30px;
+            background: #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .progress-segment {
+            height: 100%;
+            transition: all 0.4s ease;
+            border-right: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .over-limit { color: var(--danger-color) !important; }
+
+        .control-group {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 10px;
+            background: #fff;
+            border: 1px solid #eee;
+            border-left: 5px solid #ccc;
+            transition: transform 0.2s;
+        }
+        .control-group:hover { transform: translateX(5px); }
+        .active-phase { ring: 2px solid var(--accent-color); background: #f0f7ff; }
+
+        .phase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .phase-name-input {
+            border: none;
+            background: transparent;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #333;
+            width: 60%;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            font-weight: 500;
+        }
+        .btn-primary { background: var(--accent-color); color: white; }
+        .btn-add { background: var(--safe-color); color: white; width: 100%; margin-top: 5px; }
+        .btn-del { background: #fee2e2; color: var(--danger-color); padding: 4px 10px; }
+        .btn-timer { background: #e0e7ff; color: var(--accent-color); }
+        .btn:hover { opacity: 0.8; }
+
+        /* 工具側欄 */
+        .sidebar-item { margin-bottom: 20px; }
+        .student-picker { text-align: center; padding: 15px; background: #f8fafc; border-radius: 10px; }
+        .lucky-name { font-size: 1.5rem; font-weight: bold; color: var(--accent-color); margin: 10px 0; min-height: 2rem; }
+        
+        .timer-display {
+            text-align: center;
+            font-size: 2.5rem;
+            font-family: monospace;
+            background: #333;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        textarea { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; resize: vertical; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- 左側：流程設計器 -->
+    <div class="main-content">
+        <div class="card">
+            <h2>⏱️ 課程節奏設計器</h2>
+            
+            <div class="settings-bar">
+                <span>課程主題：<input v-model="lessonName" style="border:none; border-bottom:1px solid #ccc; outline:none"></span>
+                <div>
+                    設定總長：<input type="number" v-model.number="targetLimit" class="target-input"> min
+                </div>
+            </div>
+
+            <div class="total-progress-container">
+                <div class="status-header">
+                    <div>
+                        <span :class="{'over-limit': isOverLimit}" class="total-time-display">{{ totalMinutes }}</span>
+                        <span class="total-time-display"> / {{ targetLimit }}</span>
+                        <span style="font-size: 1.2rem"> min</span>
+                    </div>
+                    <span :style="{color: isOverLimit ? 'var(--danger-color)' : '#666'}" style="font-weight:bold">
+                        {{ isOverLimit ? '⚠️ 已超過預定時間' : '✅ 時間規劃完善' }}
+                    </span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div v-for="(phase, index) in phases" 
+                         :key="index"
+                         class="progress-segment"
+                         :style="{ width: (phase.time / Math.max(totalMinutes, targetLimit) * 100) + '%', backgroundColor: phase.color }">
+                    </div>
+                </div>
+            </div>
+
+            <div id="phases-list">
+                <div v-for="(phase, index) in phases" :key="index" class="control-group" :style="{borderLeftColor: phase.color}">
+                    <div class="phase-header">
+                        <input type="text" v-model="phase.name" class="phase-name-input">
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-timer" @click="startPhaseTimer(index)">⏳ 計時</button>
+                            <button class="btn btn-del" @click="removePhase(index)">刪除</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <input type="range" min="1" max="60" v-model.number="phase.time" style="flex:1">
+                        <span style="font-weight:bold; min-width: 50px;">{{ phase.time }} 分</span>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-add" @click="addPhase">+ 新增課程環節</button>
+        </div>
+    </div>
+
+    <!-- 右側：工具欄 -->
+    <div class="sidebar">
+        <!-- 1. 倒數計時 -->
+        <div class="card sidebar-item">
+            <h2>⏲️ 環節計時</h2>
+            <div v-if="activeTimer.name" style="margin-bottom:10px; font-weight:bold; color:var(--accent-color)">
+                正在進行：{{ activeTimer.name }}
+            </div>
+            <div class="timer-display">{{ formattedTime }}</div>
+            <div style="display: flex; gap: 5px;">
+                <button class="btn btn-primary" style="flex:1" @click="toggleTimer">{{ isTimerRunning ? '暫停' : '開始' }}</button>
+                <button class="btn" @click="resetTimer">重設</button>
+            </div>
+        </div>
+
+        <!-- 2. 抽籤機 -->
+        <div class="card sidebar-item student-picker">
+            <h2>🎲 隨機抽籤</h2>
+            <div class="lucky-name">{{ luckyStudent || '???' }}</div>
+            <button class="btn btn-primary" @click="pickStudent">抽出一位學生</button>
+            <div style="margin-top:10px">
+                <small>名單 (空格隔開):</small>
+                <input v-model="studentList" style="width:100%; font-size:0.8rem" placeholder="王小明 李小華...">
+            </div>
+        </div>
+
+        <!-- 3. 教案導出 -->
+        <div class="card sidebar-item">
+            <h2>📋 快速備忘 & 導出</h2>
+            <textarea v-model="memos" rows="4" placeholder="在此輸入課堂筆記..."></textarea>
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" @click="exportLesson">複製教案文字</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, computed, watch, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            // 狀態定義
+            const lessonName = ref("新課程單元");
+            const targetLimit = ref(45);
+            const phases = ref([
+                { name: "📖 講解", time: 10, color: "#3498db" },
+                { name: "💬 討論", time: 10, color: "#2ecc71" },
+                { name: "🎯 活動", time: 15, color: "#f1c40f" },
+                { name: "📝 小測驗", time: 10, color: "#9b59b6" }
+            ]);
+            
+            const studentList = ref("王大明 李小美 張一山 陳二魚 林志玲");
+            const luckyStudent = ref("");
+            const memos = ref("");
+            
+            // 計時器相關
+            const isTimerRunning = ref(false);
+            const timeLeft = ref(0);
+            const activeTimer = ref({ name: "", index: -1 });
+            let timerInterval = null;
+
+            // 計算屬性
+            const totalMinutes = computed(() => phases.value.reduce((s, p) => s + p.time, 0));
+            const isOverLimit = computed(() => totalMinutes.value > targetLimit.value);
+            const formattedTime = computed(() => {
+                const m = Math.floor(timeLeft.value / 60);
+                const s = timeLeft.value % 60;
+                return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            });
+
+            // 方法
+            const addPhase = () => {
+                phases.value.push({ name: "新環節", time: 5, color: "#95a5a6" });
+            };
+            
+            const removePhase = (idx) => phases.value.splice(idx, 1);
+
+            const pickStudent = () => {
+                const names = studentList.value.split(/\s+/).filter(s => s);
+                if (names.length === 0) return alert("請輸入學生名單");
+                luckyStudent.value = "抽籤中...";
+                setTimeout(() => {
+                    luckyStudent.value = names[Math.floor(Math.random() * names.length)];
+                }, 500);
+            };
+
+            const startPhaseTimer = (idx) => {
+                activeTimer.value = { name: phases.value[idx].name, index: idx };
+                timeLeft.value = phases.value[idx].time * 60;
+                startTimer();
+            };
+
+            const startTimer = () => {
+                if (timerInterval) clearInterval(timerInterval);
+                isTimerRunning.value = true;
+                timerInterval = setInterval(() => {
+                    if (timeLeft.value > 0) {
+                        timeLeft.value--;
+                    } else {
+                        clearInterval(timerInterval);
+                        isTimerRunning.value = false;
+                        alert(`環節「${activeTimer.value.name}」時間到！`);
+                    }
+                }, 1000);
+            };
+
+            const toggleTimer = () => {
+                if (isTimerRunning.value) {
+                    clearInterval(timerInterval);
+                    isTimerRunning.value = false;
+                } else if (timeLeft.value > 0) {
+                    startTimer();
+                }
+            };
+
+            const resetTimer = () => {
+                clearInterval(timerInterval);
+                isTimerRunning.value = false;
+                timeLeft.value = 0;
+                activeTimer.value = { name: "", index: -1 };
+            };
+
+            const exportLesson = () => {
+                let text = `【${lessonName.value}】教案流程\n`;
+                text += `總預計時間：${totalMinutes.value} 分鐘 / 目標：${targetLimit.value} 分鐘\n`;
+                text += `--------------------------\n`;
+                phases.value.forEach((p, i) => {
+                    text += `${i+1}. ${p.name} (${p.time} min)\n`;
+                });
+                if (memos.value) text += `\n備註：\n${memos.value}`;
+                
+                navigator.clipboard.writeText(text).then(() => alert("教案已複製到剪貼簿！"));
+            };
+
+            // 自動儲存與載入
+            watch([phases, targetLimit, lessonName, studentList, memos], () => {
+                const data = {
+                    phases: phases.value,
+                    targetLimit: targetLimit.value,
+                    lessonName: lessonName.value,
+                    studentList: studentList.value,
+                    memos: memos.value
+                };
+                localStorage.setItem('lessonAssistantData', JSON.stringify(data));
+            }, { deep: true });
+
+            onMounted(() => {
+                const saved = localStorage.getItem('lessonAssistantData');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    phases.value = data.phases;
+                    targetLimit.value = data.targetLimit;
+                    lessonName.value = data.lessonName || "新課程單元";
+                    studentList.value = data.studentList || studentList.value;
+                    memos.value = data.memos || "";
+                }
+            });
+
+            return {
+                lessonName, targetLimit, phases, totalMinutes, isOverLimit,
+                addPhase, removePhase, pickStudent, studentList, luckyStudent,
+                timeLeft, isTimerRunning, formattedTime, activeTimer,
+                startPhaseTimer, toggleTimer, resetTimer, memos, exportLesson
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
